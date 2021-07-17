@@ -138,4 +138,27 @@ class StageTwoTransformer(StageTwoCustom):
                 token = Categorical(logits=output.logits_dones).sample()
                 done = token.squeeze(-1)
 
-        self.cur_obs = torc
+        self.cur_obs = torch.cat(observation_tokens, dim=1)
+        grid = (
+            self.world_model.detokenize_observations(self.cur_obs)
+            .squeeze(0)
+            .cpu()
+            .numpy()
+        )
+        obs = {"entities": grid[..., :-1], "avatar": grid[..., -1:]}
+
+        self.cur_reward = reward
+        reward = self.world_model.label_to_reward(reward).item()
+
+        self.cur_done = done
+        done = bool(done.item())
+
+        return obs, reward, done, {}
+
+    def render(self, mode):
+        grid = self.world_model.detokenize_observations(self.cur_obs).cpu().numpy()
+        print("Entity index mapping:", ENTITY_IDS)
+        print("Entity attributes in this game:", self.true_parsed_manual)
+        print(grid.sum(-1))
+        print("Reward:", self.cur_reward.item())
+        print("Done: ", self.cur_done.item())
