@@ -1,0 +1,6 @@
+BasicGame block_size=2
+	SpriteSet
+		background > Immovable randomtiling=0.9 img=oryx/floor3 hidden=True
+		root >
+			enemy > Fleeing stype=avatar speed=0.5 img=oryx/alien1
+			message > Chaser stype=avatar speed=0.5 img=or

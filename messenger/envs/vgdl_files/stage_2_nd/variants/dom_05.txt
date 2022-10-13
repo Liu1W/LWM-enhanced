@@ -4,7 +4,7 @@ BasicGame block_size=2
 		root >
 			enemy > Chaser stype=avatar speed=0.5 img=oryx/alien1
 			message > Fleeing stype=avatar speed=0.5 img=oryx/bear1
-			goal > Fleeing stype=avatar speed=0.5 img=oryx/cyclop1
+			goal > Immovable stype=avatar speed=0.5 img=oryx/cyclop1
 			wall > Immovable img=oryx/wall11
 			avatar > MovingAvatar
 				no_message > img=oryx/swordman1_0
