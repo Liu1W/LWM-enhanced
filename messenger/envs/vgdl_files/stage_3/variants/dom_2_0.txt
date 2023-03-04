@@ -1,0 +1,3 @@
+BasicGame block_size=2
+	SpriteSet
+		background > Immovable randomtiling=0.9 img=oryx/floor3 hidde
