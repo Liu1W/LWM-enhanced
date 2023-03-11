@@ -48,4 +48,40 @@ def load_json(path: str) -> Dict:
     Args:
         path (str): path to json file
 
-    Returns
+    Returns:
+        Dict: json dictionary
+    """ """"""
+    with open(path, "r") as f:
+        json_dict = json.load(f)
+
+    return json_dict
+
+
+def load_pickle(path: str) -> object:
+    """Load pickle from path.
+
+    Args:
+        path (str): path to pickle file
+
+    Returns:
+        object: pickle object
+    """
+    with open(path, "rb") as f:
+        pickle_obj = pickle.load(f)
+
+    return pickle_obj
+
+
+def wrap_obs(obs: Dict[str, np.ndarray]) -> np.ndarray:
+    """Convert obs format returned by gym env (dict) to a numpy array expected by model"""
+    return np.concatenate((obs["entities"], obs["avatar"]), axis=-1)
+
+
+def setup_logging() -> None:
+    logging.basicConfig(
+        format=(
+            "[%(levelname)s:%(process)d %(module)s:%(lineno)d %(asctime)s] "
+            "%(message)s"
+        ),
+        level=logging.INFO,
+    )
