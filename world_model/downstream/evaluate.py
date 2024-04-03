@@ -80,4 +80,5 @@ class Evaluator:
                 best_metric[k] = metric[k]
                 if not self.eval_mode and k == "avg_return":
                     file_path = f"{self.save_dir}/{name}_best_{k}.ckpt"
-                    torch.save(policy
+                    torch.save(policy.state_dict(), file_path)
+                    print(f"Saved best {name} {k} as {file_path}")
