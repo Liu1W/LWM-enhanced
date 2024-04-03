@@ -92586,4 +92586,47 @@
       [
         "fish",
         "chaser",
-    
+        "message"
+      ],
+      [
+        "scientist",
+        "immovable",
+        "goal"
+      ]
+    ],
+    [
+      [
+        "airplane",
+        "fleeing",
+        "enemy"
+      ],
+      [
+        "ball",
+        "fleeing",
+        "goal"
+      ],
+      [
+        "robot",
+        "immovable",
+        "message"
+      ]
+    ],
+    [
+      [
+        "fish",
+        "immovable",
+        "goal"
+      ],
+      [
+        "ball",
+        "fleeing",
+        "message"
+      ],
+      [
+        "thief",
+        "chaser",
+        "enemy"
+      ]
+    ]
+  ]
+}
