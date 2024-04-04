@@ -83,4 +83,65 @@ class Oracle:
             # else go to message
             else:
                 message_id = get_entity_id_by_role(parsed_manual, "message")
-                t_p
+                t_pos = get_position_by_id(obs, message_id)
+            # choose action that takes avatar closest to the goal or message
+            return self.get_best_action_for_chasing(a_pos, t_pos)
+
+        return None
+
+    def get_best_action_for_chasing(self, a_pos, t_pos):
+        best_d = 1e9
+        best_a = None
+        # shuffle action order to randomize choice
+        for a, dr, dc in self.random.sample(self.ACTIONS, len(self.ACTIONS)):
+            na_pos = (a_pos[0] + dr, a_pos[1] + dc)
+            if out_of_bounds(na_pos):
+                continue
+            d = get_distance(na_pos, t_pos)
+            if d < best_d:
+                best_d = d
+                best_a = a
+        return best_a
+
+    def get_best_action_for_surviving(self, a_pos, e_pos, g_pos):
+        distance_to_enemy = get_distance(a_pos, e_pos)
+        if g_pos is not None:
+            distance_to_goal = get_distance(a_pos, g_pos)
+        else:
+            distance_to_goal = 1e9
+        # if far enough from enemy and goal just act randomly
+        SAFE_DISTANCE = 6
+        if distance_to_enemy >= SAFE_DISTANCE and distance_to_goal >= SAFE_DISTANCE:
+            return self.random.choice(range(len(self.ACTIONS)))
+        # otherwise, stay further from both
+        best_d = -1e9
+        best_a = None
+        # shuffle action order to randomize choice
+        for a, dr, dc in self.random.sample(self.ACTIONS, len(self.ACTIONS)):
+            na_pos = (a_pos[0] + dr, a_pos[1] + dc)
+            if out_of_bounds(na_pos):
+                continue
+            d = get_distance(na_pos, e_pos)
+            if g_pos is not None:
+                d = min(d, get_distance(na_pos, g_pos))
+            if d >= SAFE_DISTANCE / 2 or d > best_d:
+                best_d = d
+                best_a = a
+
+        return best_a
+
+
+class TrainOracleWithMemory(Oracle):
+    def reset(self, n):
+        pass
+
+    def act(self, obs, parsed_manual, state, encoded_manual=None, memory=None):
+        try:
+            action = super().act(obs, parsed_manual, "go_to_goal")
+        except:
+            action = super().act(obs, parsed_manual, "random")
+        if memory is not None:
+            memory.states.append(state)
+            memory.actions.append(action)
+            memory.texts.append(encoded_manual)
+        return action
