@@ -256,4 +256,108 @@ class EmmaPolicyDecoder(nn.Module):
         self.head = nn.ModuleDict(
             {
                 t: Head(
-    
+                    max_blocks=config.max_blocks,
+                    block_mask=head_tokens_pattern[t],
+                    head_module=layer[t],
+                )
+                for t in head_token_types
+            }
+        )
+
+    def __repr__(self) -> str:
+        return "emma_policy_decoder"
+
+    def _make_body(self):
+        config = self.config
+        self.manual_key_attn = nn.Sequential(
+            nn.Linear(config.embed_dim, 1), nn.Softmax(dim=2)
+        )
+        self.manual_value_attn = nn.Sequential(
+            nn.Linear(config.embed_dim, 1), nn.Softmax(dim=2)
+        )
+        manual_attn_config = dc(config)
+        manual_attn_config.num_heads = 1
+        self.manual_attn = ExternalAttention(manual_attn_config)
+
+        self.decoder = Transformer(config)
+
+    def _make_attention_masks(self):
+        history_masks = torch.tril(
+            torch.ones(self.config.max_tokens, self.config.max_tokens)
+        )
+        self.register_buffer("history_masks", history_masks)
+
+    def reset(self, n: int) -> KeysValues:
+        return self.decoder.generate_empty_keys_values(n, self.config.max_tokens)
+
+    def forward(
+        self,
+        tokens: torch.Tensor,
+        encoded_manuals: torch.Tensor,
+        past_keys_values: Optional[KeysValues] = None,
+    ) -> Tuple:
+        num_steps = tokens.size(1)  # (B, T)
+        assert num_steps <= self.config.max_tokens
+        prev_steps = 0 if past_keys_values is None else past_keys_values.size
+
+        manual_keys = (self.manual_key_attn(encoded_manuals) * encoded_manuals).sum(
+            dim=-2
+        )
+        manual_values = (self.manual_value_attn(encoded_manuals) * encoded_manuals).sum(
+            dim=-2
+        )
+        embeds = self.embedder(tokens, num_steps, prev_steps)
+
+        manual_queries = []
+        for i in range(num_steps):
+            k = (i + prev_steps) % self.tokens_per_block
+            if k in [1, 4, 7]:
+                manual_queries.append(embeds[:, i])
+
+        if manual_queries:
+            manual_queries = torch.stack(manual_queries, dim=1)
+            attn_values = self.manual_attn(manual_queries, manual_keys, manual_values)
+
+        j = 0
+        for i in range(num_steps):
+            k = (i + prev_steps) % self.tokens_per_block
+            if k in [1, 4, 7]:
+                embeds[:, i] = embeds[:, i] + attn_values[:, j]
+                j += 1
+
+        embeds = embeds + self.pos_emb(
+            prev_steps + torch.arange(num_steps, device=tokens.device)
+        )
+
+        """
+        embeds = embeds + self.pos_emb(torch.arange(num_steps, device=tokens.device))
+
+        embeds = embeds + self.pos_emb_2(
+            torch.tensor(prev_steps // self.tokens_per_block).to(self.device)
+        )
+        """
+
+        history_attn_mask = self.history_masks[
+            prev_steps : (prev_steps + num_steps), : (prev_steps + num_steps)
+        ]
+
+        x = self.decoder(
+            embeds,
+            past_keys_values=past_keys_values,
+            self_attention_mask=history_attn_mask,
+        )
+
+        outputs = {
+            t: h(x, num_steps=num_steps, prev_steps=prev_steps)
+            for t, h in self.head.items()
+        }
+
+        return outputs["action"], outputs["value"]
+
+        """
+        x = embeds.mean(1)
+        output_action = self.action_layer(x)
+        output_value = self.value_layer(x)
+
+        return output_action, output_value
+        """
