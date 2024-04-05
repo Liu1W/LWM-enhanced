@@ -146,4 +146,114 @@ class TransformerEMMA(nn.Module):
 
 
 class RawTextPolicyEncoder(nn.Module):
-   
+    def __init__(self, config: TransformerConfig):
+        super().__init__()
+        self.config = config
+        self.device = config.device
+        self.transformer = Transformer(config)
+        self.linear_proj = nn.Linear(768, config.embed_dim)
+
+    def __repr__(self) -> str:
+        return "raw_text_policy_encoder"
+
+    def forward(self, embeds: torch.Tensor) -> torch.Tensor:
+        embeds = self.linear_proj(embeds)
+        shape = embeds.shape
+        embeds = rearrange(embeds, "b n l e -> (b n) l e")
+        x = self.transformer(embeds)
+        x = x.reshape(*shape[:2], *x.shape[1:])
+
+        return x
+
+
+class EmmaPolicyDecoder(nn.Module):
+    """Transformer decoder with EMMA-style attention"""
+
+    # tokens per entity
+    tokens_per_entity = 3
+    # tokens per observations
+    tokens_per_observation = 12
+    # tokens per block
+    tokens_per_block = 13
+
+    def __init__(self, config: TransformerConfig):
+        super().__init__()
+
+        self.config = config
+        self.device = config.device
+        self.tokenizer = {name: func() for name, func in config.tokenizers.items()}
+
+        self._make_embedder()
+        self._make_body()
+        self._make_head()
+        self._make_attention_masks()
+
+    def _make_embedder(self):
+        config = self.config
+
+        token_types = ["action", "observation"]
+        vocab_size = {
+            "action": 5,
+            "observation": self.tokenizer["observation"].vocab_size,
+        }
+
+        tokens_pattern = {}
+        for t in token_types:
+            tokens_pattern[t] = torch.zeros(self.tokens_per_block)
+        # first token is action
+        tokens_pattern["action"][0] = 1
+        # observation tokens
+        tokens_pattern["observation"][1:] = 1
+
+        self.embedder = Embedder(
+            max_blocks=config.max_blocks,
+            block_masks={t: tokens_pattern[t] for t in token_types},
+            embedding_tables=nn.ModuleDict(
+                {t: nn.Embedding(vocab_size[t], config.embed_dim) for t in token_types}
+            ),
+        )
+        self.pos_emb = nn.Embedding(config.max_tokens, config.embed_dim)
+        self.pos_emb_2 = nn.Embedding(config.max_tokens, config.embed_dim)
+
+    def _make_head(self):
+        config = self.config
+
+        n_o = self.tokens_per_observation
+
+        head_token_types = ["action", "value"]
+        head_tokens_pattern = {}
+        for t in head_token_types:
+            head_tokens_pattern[t] = torch.zeros(self.tokens_per_block)
+        head_tokens_pattern["action"][-1] = 1
+        head_tokens_pattern["value"][-1] = 1
+
+        n_hidden_layers = 1
+        hidden_layers = (
+            nn.Linear(config.embed_dim, config.embed_dim),
+            nn.LeakyReLU(),
+        ) * n_hidden_layers
+
+        layer = {}
+        layer["action"] = nn.Sequential(
+            nn.Linear(config.embed_dim, config.embed_dim),
+            nn.LeakyReLU(),
+            *hidden_layers,
+            nn.Linear(config.embed_dim, 5),
+            nn.Softmax(dim=-1)
+        )
+
+        # critic
+        layer["value"] = nn.Sequential(
+            nn.Linear(config.embed_dim, config.embed_dim),
+            nn.LeakyReLU(),
+            *hidden_layers,
+            nn.Linear(config.embed_dim, 1)
+        )
+
+        self.action_layer = layer["action"]
+        self.value_layer = layer["value"]
+
+        self.head = nn.ModuleDict(
+            {
+                t: Head(
+    
