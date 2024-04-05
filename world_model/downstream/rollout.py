@@ -132,4 +132,6 @@ class ObservationBuffer:
                 )
         else:
             assert isinstance(self.buffer[0], np.ndarray)
-            stacked_obs = torch.stack([self
+            stacked_obs = torch.stack([self._np_to_tensor(obs) for obs in self.buffer])
+
+        return stacked_obs
