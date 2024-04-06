@@ -100,4 +100,96 @@ class DataGenerator:
 
         # setup environment
         world_model = make_model(args) if wm_weights_path is not None else None
-        self.env = 
+        self.env = make_env(args, world_model=world_model)
+
+        self.random = random.Random(args.seed + 2340)
+
+    def generate_data(self):
+        self.keys = {
+            "entities": list(self.texts.keys()),  # ["robot", ..., "sword"]
+            "movements": list(
+                list(self.texts.values())[0].keys()
+            ),  # ["chasing", ..., "fleeing"]
+            "roles": list(
+                list(list(self.texts.values())[0].values())[0].keys()
+            ),  # ["enemy", ..., "goal"]
+        }
+
+        dataset = {
+            "texts": self.texts,
+            "keys": self.keys,
+            "rollouts": {},
+        }
+
+        for split, games in self.splits.items():
+            idxs = []
+            manual_idxs = []
+            ground_truth_idxs = []
+            grid_sequences = []
+            action_sequences = []
+            reward_sequences = []
+            done_sequences = []
+
+            if split == "train":
+                num_repeats = math.ceil(self.num_train / len(games))
+            elif self.behavior_policy == "mixed":
+                num_repeats = len(self.policy.INTENTIONS)
+            elif isinstance(self.policy, Oracle):
+                assert self.behavior_policy in self.policy.INTENTIONS
+                num_repeats = 1
+            else:
+                num_repeats = math.ceil(self.num_eval / len(games))
+
+            print(
+                f"Starting to generate rollouts for split: {split}, trajectories per game {num_repeats}"
+            )
+
+            returns = []
+            for i in tqdm(range(len(games))):
+                for n in range(num_repeats):
+                    rollout_result = self.rollout(split, games[i], n)
+                    returns.append(sum(rollout_result.reward_seq))
+
+                    manual_idxs.append(rollout_result.manual_idx)
+                    ground_truth_idxs.append(rollout_result.ground_truth_idx)
+                    grid_sequences.append(rollout_result.grid_seq)
+                    action_sequences.append(rollout_result.act_seq)
+                    reward_sequences.append(rollout_result.reward_seq)
+                    done_sequences.append(rollout_result.done_seq)
+
+            print(
+                f"Average return for split {split}: {np.mean(returns):.2f} +/- {np.std(returns)/np.sqrt(num_repeats):.2f}"
+            )
+
+            dataset["rollouts"][split] = {
+                "manual_idxs": manual_idxs,
+                "ground_truth_idxs": ground_truth_idxs,
+                "grid_sequences": grid_sequences,
+                "action_sequences": action_sequences,
+                "reward_sequences": reward_sequences,
+                "done_sequences": done_sequences,
+            }
+
+        with open(self.save_path, "wb") as f:
+            pickle.dump(dataset, f)
+            print(f"Successfully saved dataset at {self.save_path}!")
+
+    def rollout(self, split, game, n):
+        # reset environment
+        env = self.env
+        obs, info = env.reset(split=split, entities=game)
+
+        raw_manual = info["raw_manual"]
+        true_parsed_manual = info["true_parsed_manual"]
+
+        # these are the indices of the texts in the big texts dictionary
+        manual_idx = self._find_manual_idx(raw_manual, true_parsed_manual, split)
+
+        # these are the indices of the parsed manuals in the keys dictionary
+        ground_truth_idx = self._find_ground_truth_idx(true_parsed_manual)
+
+        grid_seq, act_seq, reward_seq, done_seq = [obs], [0], [0], [False]
+
+        # choose an intention for the episode
+        if self.behavior_policy == "mixed":
+            if "trai
