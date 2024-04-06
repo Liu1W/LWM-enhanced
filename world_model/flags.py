@@ -97,4 +97,116 @@ def make():
         "--grad_acc_steps",
         default=1,
         type=int,
-        help="number of gradient accumu
+        help="number of gradient accumulation steps",
+    )
+    parser.add_argument(
+        "--max_grad_norm", default=10.0, type=float, help="max gradient norm"
+    )
+    parser.add_argument(
+        "--learning_rate", default=1e-4, type=float, help="World model learning rate"
+    )
+    parser.add_argument("--weight_decay", default=0.01, type=float, help="Weight decay")
+    parser.add_argument(
+        "--save_every_batches",
+        type=int,
+        default=None,
+        help="number of batches between model saves",
+    )
+    parser.add_argument(
+        "--shuffle_manual", type=int, default=1, help="Shuffle descriptions in a manual"
+    )
+
+    # Logging arguments
+    parser.add_argument(
+        "--log_every_batches",
+        default=500,
+        type=int,
+        help="number of batches between evaluations",
+    )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="online",
+        choices=["online", "offline"],
+        help="mode to run wandb in",
+    )
+    parser.add_argument("--use_wandb", type=int, default=0, help="log to wandb?")
+    parser.add_argument("--wandb_entity", type=str, default=None, help="wandb entity")
+
+    # Environment arguments
+    parser.add_argument(
+        "--env.name", type=str, default="custom", help="Name of Gym environment"
+    )
+    parser.add_argument(
+        "--env.stage", type=int, default=2, help="Stage of Messenger environment"
+    )
+
+    # Data generation arguments
+    parser.add_argument(
+        "--data_gen.save_path", type=str, default=None, help="path for saving data"
+    )
+    parser.add_argument(
+        "--splits_path",
+        default="custom_dataset/data_splits_final_with_messenger_names.json",
+        type=str,
+    )
+    parser.add_argument(
+        "--texts_path",
+        default="../messenger/envs/texts/custom_text_splits/custom_text_splits_with_messenger_names.json",
+        type=str,
+    )
+    parser.add_argument("--data_gen.num_train", default=100000, type=int)
+    parser.add_argument("--data_gen.num_eval", default=500, type=int)
+    parser.add_argument(
+        "--data_gen.behavior_policy",
+        default="mixed",
+        type=str,
+        help="behavior policy for generating rollouts",
+    )
+    parser.add_argument(
+        "--data_gen.behavior_policy_weights_path",
+        type=str,
+        default=None,
+        help="Path to policy weights",
+    )
+
+    # EMMA policy arguments
+    parser.add_argument(
+        "--emma_policy.hist_len",
+        type=int,
+        default=3,
+        help="length of history used by EMMA policy",
+    )
+    parser.add_argument(
+        "--emma_policy.base_arch",
+        type=str,
+        default="conv",
+        choices=["conv", "transformer"],
+        help="EMMA policy base architecture",
+    )
+    parser.add_argument(
+        "--emma_policy.weights_path",
+        type=str,
+        default=None,
+        help="Path to policy weights",
+    )
+
+    # downstream arguments
+    parser.add_argument(
+        "--downstream.splits_path",
+        type=str,
+        default="custom_dataset/data_splits_downstream.json",
+        help="Path to downstream split file containing evaluation games",
+    )
+
+    parser.add_argument(
+        "--downstream.fix_split",
+        type=str,
+        default=None,
+        help="split for training on downstream task",
+    )
+    parser.add_argument(
+        "--downstream.fix_game",
+        type=int,
+        default=None,
+        help="game id fo
