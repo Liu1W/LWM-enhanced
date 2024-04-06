@@ -209,4 +209,32 @@ def make():
         "--downstream.fix_game",
         type=int,
         default=None,
-        help="game id fo
+        help="game id for training on downstream task",
+    )
+
+    parser.add_argument(
+        "--downstream.oracle_weights_path",
+        type=str,
+        default=None,
+        help="Path to oracle policy weights",
+    )
+
+    parser.add_argument(
+        "--downstream.task",
+        type=str,
+        default=None,
+        choices=["imitation", "filtered_bc", "self_imitation"],
+        help="Downstream task",
+    )
+
+    args = parser.parse_args()
+    args.device = torch.device(f"cuda:{args.device}")
+
+    # seed everything
+    if args.seed is not None:
+        torch.manual_seed(args.seed)
+        random.seed(args.seed)
+        np.random.seed(args.seed)
+        torch.cuda.manual_seed(args.seed)
+
+    return args
