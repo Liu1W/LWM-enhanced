@@ -192,4 +192,90 @@ class DataGenerator:
 
         # choose an intention for the episode
         if self.behavior_policy == "mixed":
-            if "trai
+            if "train" in split:
+                episode_intention = self.random.choice(self.policy.INTENTIONS)
+            else:
+                episode_intention = self.policy.INTENTIONS[n]
+        elif self.behavior_policy == "emma":
+            episode_intention = None
+        else:
+            episode_intention = self.behavior_policy
+            assert episode_intention in self.policy.INTENTIONS
+
+        done = False
+        while not done:
+            action = self.policy.act(obs, true_parsed_manual, episode_intention)
+            obs, reward, done, _ = env.step(action)
+
+            # append to sequences
+            grid_seq.append(obs)
+            act_seq.append(action)
+            reward_seq.append(reward)
+            done_seq.append(done)
+
+        return RolloutResult(
+            grid_seq, act_seq, reward_seq, done_seq, manual_idx, ground_truth_idx
+        )
+
+    def _find_manual_idx(
+        self, manual: List[str], ground_truth: List[Tuple[str]], split: str
+    ) -> List[int]:
+        """Find the index of the manual descriptors in the texts dict.
+
+        Args:
+            manual (List[str]): list of manual descriptors
+            ground_truth (List[Tuple[str]]): list of parsed descriptors
+            split (str): dataset split
+
+        Returns:
+            List[int]: list of indices of the manual descriptors
+        """
+        manual_idx = []
+        for idx in range(len(manual)):
+            gt_entity = ground_truth[idx][0]
+            gt_movement = ground_truth[idx][1]
+            gt_role = ground_truth[idx][2]
+
+            descriptors = self.texts[gt_entity][gt_movement][gt_role][split]
+            desc_idx = descriptors.index(manual[idx])
+            manual_idx.append(desc_idx)
+
+        return manual_idx
+
+    def _find_ground_truth_idx(
+        self, ground_truth: List[Tuple[str]]
+    ) -> List[Tuple[int]]:
+        """Find the index of the parsed manuals in the keys dict.
+
+        Args:
+            ground_truth (List[Tuple[str]]): list of parsed descriptors
+
+        Returns:
+            List[Tuple[int]]: list of indices tuples of the parsed manuals
+        """ """"""
+        entities = self.keys["entities"]
+        movements = self.keys["movements"]
+        roles = self.keys["roles"]
+
+        ground_truth_idx = []
+        for idx in range(len(ground_truth)):
+            gt_entity = ground_truth[idx][0]
+            gt_movement = ground_truth[idx][1]
+            gt_role = ground_truth[idx][2]
+
+            entity_idx = entities.index(gt_entity)
+            movement_idx = movements.index(gt_movement)
+            role_idx = roles.index(gt_role)
+
+            ground_truth_idx.append((entity_idx, movement_idx, role_idx))
+
+        return ground_truth_idx
+
+
+if __name__ == "__main__":
+    args = flags.make()
+
+    assert args.data_gen.save_path, "Specify a path for saving the data"
+
+    data_generator = DataGenerator(args)
+    data_generator.generate_data()
