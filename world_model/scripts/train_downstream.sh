@@ -38,4 +38,9 @@ python -u train_downstream.py \
         --downstream.task ${task} \
         --batch_size 10 \
         --max_batches ${max_batches} \
-        --downstrea
+        --downstream.oracle_weights_path experiments/${oracle_weights_name}/${oracle_weights_ckpt}.ckpt \
+        --save_every 100 \
+        --use_wandb ${use_wandb}
+
+exit 0
+
