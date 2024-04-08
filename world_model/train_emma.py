@@ -71,4 +71,73 @@ def train(
                 eval_metric = evaluator.evaluate(
                     policy,
                     eval_env,
-                    eval_episo
+                    eval_episodes,
+                    best_eval_metric[split],
+                    split=split,
+                )
+                for k in eval_metric:
+                    wandb_stats[f"{split}/{k}"] = eval_metric[k]
+                    wandb_stats[f"{split}_best/{k}"] = best_eval_metric[split][k]
+
+            wandb.log(wandb_stats)
+
+        if args.eval_mode:
+            break
+
+        # save current policy
+        if args.save_every_batches is not None and i % args.save_every_batches == 0:
+            file_path = f"{args.save_dir}/policy_{i}.ckpt"
+            torch.save(policy.state_dict(), file_path)
+            print(f"Saved current policy as {file_path}")
+
+        train_last_metric = trainer.train(policy, train_env, optimizer, dataset=dataset)
+        for k in train_last_metric:
+            train_metric[k].append(train_last_metric[k])
+
+
+if __name__ == "__main__":
+    args = flags.make()
+
+    # set exp dir
+    if args.save_dir is None:
+        assert args.exp_name is not None, "Experiment name is not provided!"
+        args.save_dir = f"experiments/{args.exp_name}"
+
+    # make exp dir of not exist
+    if args.eval_mode == 0:
+        if os.path.exists(args.save_dir):
+            print(f"Output folder {args.save_dir} exists")
+            sys.exit(1)
+        os.makedirs(args.save_dir)
+
+    # print arguments
+    print(pprint.pformat(vars(args), indent=2))
+
+    # start wandb logging
+    wandb.init(
+        project="lwm-messenger-transformer",
+        entity=args.wandb_entity,
+        group=f"downstream",
+        name=f"{args.exp_name}_{str(int(time.time()))}",
+        mode=args.mode if args.use_wandb else "disabled",
+    )
+    wandb.config.update(args)
+
+    if args.wm_weights_path is not None:
+        world_model = make_model(args)
+    else:
+        world_model = None
+
+    dataset = make_dataset(args)
+    train_env = make_env(args, world_model=world_model, fix_order=False)
+    eval_env = make_env(args, world_model=world_model, fix_order=True)
+
+    policy = make_policy(args)
+    print(policy)
+
+    optimizer = torch.optim.AdamW(policy.parameters(), lr=args.learning_rate)
+
+    trainer = ImitationTrainer(args)
+    evaluator = Evaluator(args)
+
+    train(args, trainer, evaluator, dataset, policy, train_env, eval_env, optimizer)
