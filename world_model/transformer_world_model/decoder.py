@@ -124,4 +124,114 @@ class StandardDecoder(BaseDecoder):
     """Standard Transformer decoder with interleaved multi-headed self- and cross-attentions"""
 
     def __init__(self, config: TransformerConfig):
-        super().__i
+        super().__init__(config)
+
+    def __repr__(self) -> str:
+        return "standard_decoder"
+
+    def _make_body(self):
+        self.decoder = Transformer(self.config)
+
+    def forward(
+        self,
+        tokens: torch.Tensor,
+        encoded_manuals: torch.Tensor,
+        past_keys_values: Optional[KeysValues] = None,
+    ) -> WorldModelOutput:
+        num_steps = tokens.size(1)  # (B, T)
+        assert num_steps <= self.config.max_tokens
+        prev_steps = 0 if past_keys_values is None else past_keys_values.size
+
+        embeds = self.embedder(tokens, num_steps, prev_steps) + self.pos_emb(
+            prev_steps + torch.arange(num_steps, device=tokens.device)
+        )
+
+        history_attn_mask = self.history_masks[
+            prev_steps : (prev_steps + num_steps), : (prev_steps + num_steps)
+        ]
+
+        x = self.decoder(
+            embeds,
+            external_keys_values=encoded_manuals,
+            past_keys_values=past_keys_values,
+            self_attention_mask=history_attn_mask,
+        )
+
+        outputs = {
+            f"logits_{t}s": h(x, num_steps=num_steps, prev_steps=prev_steps)
+            for t, h in self.head.items()
+        }
+
+        return WorldModelOutput(output_sequence=x, **outputs)
+
+
+class TrueGroundDecoder(StandardDecoder):
+    """Transformer Decoder that grounds each description to correct entity token in observation"""
+
+    def __repr__(self) -> str:
+        return "true_ground_decoder"
+
+    def _make_body(self):
+        config = self.config
+        self.manual_key_attn = nn.Sequential(
+            nn.Linear(config.embed_dim, 1), nn.Softmax(dim=2)
+        )
+        self.decoder = Transformer(config)
+
+    def forward(
+        self,
+        tokens: torch.Tensor,
+        encoded_manuals: torch.Tensor,
+        past_keys_values: Optional[KeysValues] = None,
+    ) -> WorldModelOutput:
+        num_steps = tokens.size(1)  # (B, T)
+        assert num_steps <= self.config.max_tokens
+        prev_steps = 0 if past_keys_values is None else past_keys_values.size
+
+        # TODO: change this to manual_values
+        manual_keys = (self.manual_key_attn(encoded_manuals) * encoded_manuals).sum(
+            dim=-2
+        )
+
+        attr_embeds = []
+        for i in range(num_steps):
+            k = (i + prev_steps) % self.config.tokens_per_block
+            if k in [1, 4, 7]:
+                attr_embeds.append(manual_keys[:, k // 3])
+            else:
+                attr_embeds.append(torch.zeros_like(manual_keys[:, 0]))
+        attr_embeds = torch.stack(attr_embeds, dim=1)
+
+        embeds = self.embedder(tokens, num_steps, prev_steps) + self.pos_emb(
+            prev_steps + torch.arange(num_steps, device=tokens.device)
+        )
+        embeds = embeds + attr_embeds
+
+        history_attn_mask = self.history_masks[
+            prev_steps : (prev_steps + num_steps), : (prev_steps + num_steps)
+        ]
+
+        x = self.decoder(
+            embeds,
+            past_keys_values=past_keys_values,
+            self_attention_mask=history_attn_mask,
+        )
+
+        outputs = {
+            f"logits_{t}s": h(x, num_steps=num_steps, prev_steps=prev_steps)
+            for t, h in self.head.items()
+        }
+
+        return WorldModelOutput(output_sequence=x, **outputs)
+
+
+class EmmaDecoder(BaseDecoder):
+    """Transformer decoder with EMMA-style attention"""
+
+    def __repr__(self) -> str:
+        return "emma_decoder"
+
+    def _make_body(self):
+        config = self.config
+        self.manual_key_attn = nn.Sequential(
+ 
