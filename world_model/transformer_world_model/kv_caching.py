@@ -105,4 +105,49 @@ class KeysValues:
 
     @property
     def size(self):
-        return self._keys_values[0].s
+        return self._keys_values[0].shape[2]
+
+    def reset(self) -> None:
+        for kv_cache in self._keys_values:
+            kv_cache.reset()
+
+    def prune(self, mask: np.ndarray) -> None:
+        for kv_cache in self._keys_values:
+            kv_cache.prune(mask)
+
+
+class AssignWithoutInplaceCheck(torch.autograd.Function):
+    """
+    Inspired from : https://discuss.pytorch.org/t/disable-in-place-correctness-version-check-any-other-workaround/90738/4
+    Warning : do not use it to overwrite a slice twice.
+    """
+
+    @staticmethod
+    def get_slice(dim: int, start: int, stop: int) -> Tuple[slice]:
+        return tuple(
+            [
+                slice(None),
+            ]
+            * dim
+            + [slice(start, stop)]
+        )
+
+    @staticmethod
+    def forward(
+        ctx, input: torch.Tensor, value: torch.Tensor, dim: int, start: int, stop: int
+    ) -> torch.Tensor:
+        ctx.dim = dim
+        ctx.start = start
+        ctx.stop = stop
+        input.data[AssignWithoutInplaceCheck.get_slice(dim, start, stop)] = value
+        return input
+
+    @staticmethod
+    def backward(ctx, grad_out: torch.Tensor) -> Tuple[torch.Tensor]:
+        return (
+            grad_out,
+            grad_out[AssignWithoutInplaceCheck.get_slice(ctx.dim, ctx.start, ctx.stop)],
+            None,
+            None,
+            None,
+        )
