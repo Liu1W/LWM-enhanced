@@ -140,4 +140,13 @@ class RawTextEncoder(BaseEncoder):
         return "raw_text_encoder"
 
     def forward(self, tokens: List) -> torch.Tensor:
-        embeds, _ = self.bert_encoder.enc
+        embeds, _ = self.bert_encoder.encode(tokens)
+        embeds = self.linear_proj(embeds)
+
+        shape = embeds.shape
+        embeds = rearrange(embeds, "b n l e -> (b n) l e")
+        x = self.transformer(embeds)
+        # B x N x L x E
+        x = x.reshape(*shape[:2], *x.shape[1:])
+
+        return x
